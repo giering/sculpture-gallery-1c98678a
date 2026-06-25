@@ -67,6 +67,51 @@
     font-size:46px; cursor:pointer; padding:0 18px; user-select:none; }
   #lb .nav:hover { color:#fff; }
   #lb .prev { left:6px; } #lb .next { right:6px; }
+
+  /* --- mark / tag additions --- */
+  .thumb-wrap .mark-btn { position:absolute; top:5px; right:5px; z-index:6;
+    width:26px; height:26px; border:none; border-radius:50%;
+    background:rgba(20,20,20,.65); color:#fff; font-size:15px; line-height:26px;
+    padding:0; text-align:center; cursor:pointer; display:none; }
+  .card:hover .thumb-wrap .mark-btn { display:block; }
+  .card.marked .thumb-wrap .mark-btn { display:block; color:#d4b896; background:rgba(20,20,20,.85); }
+  .card.marked { outline:2px solid #d4b896; outline-offset:-2px; }
+  @keyframes hlpulse { 0%{box-shadow:0 0 0 0 rgba(212,184,150,0);}
+    15%{box-shadow:0 0 0 4px rgba(212,184,150,.85);}
+    100%{box-shadow:0 0 0 4px rgba(212,184,150,0);} }
+  .card.hl { animation:hlpulse 1.6s ease-out; }
+
+  .sb-grp { padding-top:4px; }
+  .mk-lnk { display:flex; justify-content:space-between; align-items:center; }
+  .mk-lbl { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+  .mk-x { color:#666; font-size:.85em; padding-left:6px; cursor:pointer; }
+  .mk-x:hover { color:#e0443e; }
+
+  #lb-tags { position:absolute; left:0; right:0; bottom:0; z-index:110;
+    background:rgba(18,18,18,.92); border-top:1px solid #2a2a2a;
+    padding:10px 16px; display:flex; flex-direction:column; gap:8px;
+    max-height:34vh; overflow:auto; }
+  #lb-tags input { width:240px; max-width:60vw; background:#222; border:1px solid #333;
+    color:#ddd; padding:6px 9px; border-radius:5px; font-size:.85em; }
+  .lt-chips, .lt-existing { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:.72em; border-radius:12px; padding:3px 9px; cursor:pointer; user-select:none; }
+  .chip.cur { background:#d4b896; color:#1a1a1a; }
+  .chip.cur b { cursor:pointer; padding-left:3px; }
+  .chip.add { background:#262626; color:#aaa; border:1px solid #333; }
+  .chip.add:hover { color:#ddd; border-color:#d4b896; }
+
+  .tg-lnk { cursor:pointer; }
+  .tg-lnk .sc { color:#555; }
+  .tg-lnk.active { color:#d4b896; border-left-color:#d4b896; background:rgba(212,184,150,.06); }
+  .tg-right { display:flex; align-items:center; gap:6px; }
+  .tg-x { color:#666; font-size:.85em; cursor:pointer; display:none; }
+  .tg-lnk:hover .tg-x { display:inline; }
+  .tg-x:hover { color:#e0443e; }
+
+  .sb-foot { display:flex; gap:6px; padding:10px 12px; border-top:1px solid #262626; margin-top:6px; }
+  .sb-foot button { flex:1; background:#222; border:1px solid #333; color:#bbb;
+    border-radius:5px; padding:5px 0; font-size:.72em; cursor:pointer; }
+  .sb-foot button:hover { color:#ddd; border-color:#555; }
 </style>
 </head><body>
 <header>
@@ -96,6 +141,19 @@
 <div class="sb-lnk" id="lnk-2015" data-img="1" data-vid="0" onclick="goYear('2015')">2015<span class="sc">1</span></div>
 <div class="sb-lnk" id="lnk-2014" data-img="1" data-vid="0" onclick="goYear('2014')">2014<span class="sc">1</span></div>
 <div class="sb-lnk" id="lnk-undated" data-img="22" data-vid="0" onclick="goYear('undated')">Undated<span class="sc">22</span></div>
+    <div class="sb-grp" id="grp-marked" style="display:none">
+      <div class="sb-hd">Marked <span id="mk-n" class="sc"></span></div>
+      <div id="sb-marked"></div>
+    </div>
+    <div class="sb-grp" id="grp-tags" style="display:none">
+      <div class="sb-hd">Tags</div>
+      <div id="sb-tags"></div>
+    </div>
+    <div class="sb-grp sb-foot">
+      <button id="btn-export" type="button">Export</button>
+      <button id="btn-import" type="button">Import</button>
+      <input id="imp-file" type="file" accept="application/json" style="display:none">
+    </div>
   </nav>
   <div class="main" id="main">
     <section class="yr-sec" id="yr-2026" data-img="1" data-vid="1"><h2 class="yr-head">2026 <span class="yc">2</span></h2><div class="grid"><div class="card" data-kind="video" data-orig="instagram_saved/DZCdm28Dhxf.mp4" onclick="openLB(this)"><div class="thumb-wrap"><img src="insta_gallery_thumbs/14f7a968a6c154b3.jpg" loading="lazy" alt=""><span class="vbadge">&#9658;</span></div><div class="cap">DZCdm28Dhxf</div></div>
@@ -436,12 +494,27 @@
   <span class="nav prev" onclick="step(-1)">&#10094;</span>
   <span class="nav next" onclick="step(1)">&#10095;</span>
   <div id="lb-content"></div>
+  <div id="lb-tags" onclick="event.stopPropagation()"></div>
 </div>
 
 <script>
 var allCards = Array.prototype.slice.call(document.querySelectorAll('.card'));
 var curKind = 'all';
 var cur = -1;
+
+// --- mark/tag persistent state ------------------------------------------
+var GKEY = 'igsg::v1';
+function loadState() {
+  try { var o = JSON.parse(localStorage.getItem(GKEY)) || {}; }
+  catch (e) { o = {}; }
+  if (!o.marks) o.marks = {};
+  if (!o.tags) o.tags = {};
+  return o;
+}
+function saveState() { localStorage.setItem(GKEY, JSON.stringify(GST)); }
+function cardId(c) { return c.dataset.orig; }
+var GST = loadState();
+var activeTag = null;
 
 function cardVisible(c) {
   if (c.style.display === 'none') return false;
@@ -454,7 +527,8 @@ function applyFilters() {
   allCards.forEach(function(c) {
     var kindOk = (curKind === 'all') || (c.dataset.kind === curKind);
     var capOk = c.querySelector('.cap').textContent.toLowerCase().indexOf(q) !== -1;
-    c.style.display = (kindOk && capOk) ? '' : 'none';
+    var tagOk = !activeTag || (GST.tags[cardId(c)] || []).indexOf(activeTag) !== -1;
+    c.style.display = (kindOk && capOk && tagOk) ? '' : 'none';
   });
   // hide year sections with no visible cards
   document.querySelectorAll('.yr-sec').forEach(function(sec) {
@@ -478,6 +552,7 @@ function setTab(kind, btn) {
 }
 function filterCards() { applyFilters(); }
 function goYear(ymark) {
+  if (activeTag) { activeTag = null; applyFilters(); if (typeof renderTags === 'function') renderTags(); }
   var el = document.getElementById('yr-' + ymark);
   if (el && el.style.display !== 'none') el.scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -489,6 +564,7 @@ function render(i) {
     box.innerHTML = '<video src="'+c.dataset.orig+'" controls autoplay loop></video>';
   else
     box.innerHTML = '<img src="'+c.dataset.orig+'">';
+  renderLbTags(c);
   cur = i;
 }
 function openLB(card) { render(allCards.indexOf(card)); document.getElementById('lb').classList.add('on'); }
@@ -505,6 +581,7 @@ function step(d) {
   render(allCards.indexOf(vis[pos]));
 }
 document.addEventListener('keydown', function(e) {
+  if (e.target && e.target.tagName === 'INPUT') return;
   if (!document.getElementById('lb').classList.contains('on')) return;
   if (e.key === 'Escape') closeLB();
   else if (e.key === 'ArrowLeft') step(-1);
@@ -522,5 +599,210 @@ var spy = new IntersectionObserver(function(entries) {
   });
 }, {rootMargin:'-55px 0px -75% 0px', threshold:0});
 document.querySelectorAll('.yr-sec').forEach(function(s) { spy.observe(s); });
+
+// --- marking -------------------------------------------------------------
+function isMarked(id) { return !!GST.marks[id]; }
+function applyMarkUI(c) { c.classList.toggle('marked', isMarked(cardId(c))); }
+function applyMarkAll() { allCards.forEach(applyMarkUI); }
+function toggleMark(c) {
+  var id = cardId(c);
+  if (GST.marks[id]) delete GST.marks[id]; else GST.marks[id] = 1;
+  saveState();
+  applyMarkUI(c);
+  if (typeof renderMarked === 'function') renderMarked();
+}
+function addMarkButtons() {
+  allCards.forEach(function (c) {
+    if (c.querySelector('.mark-btn')) return;
+    var b = document.createElement('button');
+    b.className = 'mark-btn'; b.type = 'button';
+    b.title = 'Mark / unmark'; b.textContent = '★';
+    b.addEventListener('click', function (e) {
+      e.stopPropagation(); e.preventDefault(); toggleMark(c);
+    });
+    var wrap = c.querySelector('.thumb-wrap');
+    if (wrap) wrap.appendChild(b);
+    applyMarkUI(c);
+  });
+}
+
+// --- marked sidebar group ------------------------------------------------
+function capOf(c) { var el = c.querySelector('.cap'); return el ? el.textContent.trim() : ''; }
+function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function goCard(c) {
+  if (activeTag) { activeTag = null; applyFilters(); if (typeof renderTags === 'function') renderTags(); }
+  c.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  c.classList.remove('hl'); void c.offsetWidth; c.classList.add('hl');
+  setTimeout(function () { c.classList.remove('hl'); }, 1600);
+}
+function renderMarked() {
+  var grp = document.getElementById('grp-marked');
+  var box = document.getElementById('sb-marked');
+  var n = Object.keys(GST.marks).length;
+  document.getElementById('mk-n').textContent = n ? '(' + n + ')' : '';
+  box.innerHTML = '';
+  if (!n) { grp.style.display = 'none'; return; }
+  grp.style.display = '';
+  allCards.forEach(function (c) {
+    var id = cardId(c);
+    if (!GST.marks[id]) return;
+    var row = document.createElement('div'); row.className = 'sb-lnk mk-lnk';
+    var lbl = document.createElement('span'); lbl.className = 'mk-lbl';
+    lbl.textContent = truncate(capOf(c) || id, 22);
+    lbl.onclick = function () { goCard(c); };
+    var x = document.createElement('span'); x.className = 'mk-x';
+    x.textContent = '✕'; x.title = 'Unmark';
+    x.onclick = function (e) { e.stopPropagation(); toggleMark(c); };
+    row.appendChild(lbl); row.appendChild(x); box.appendChild(row);
+  });
+}
+
+// --- tags ----------------------------------------------------------------
+function normTag(t) { return t.trim().toLowerCase().replace(/^#+/, ''); }
+function tagsOf(id) { return GST.tags[id] || []; }
+function addTag(id, t) {
+  t = normTag(t); if (!t) return;
+  var a = GST.tags[id] || (GST.tags[id] = []);
+  if (a.indexOf(t) === -1) a.push(t);
+  saveState();
+}
+function removeTag(id, t) {
+  var a = GST.tags[id]; if (!a) return;
+  var i = a.indexOf(t); if (i > -1) a.splice(i, 1);
+  if (!a.length) delete GST.tags[id];
+  saveState();
+}
+function allTags() {
+  var m = {};
+  Object.keys(GST.tags).forEach(function (id) {
+    (GST.tags[id] || []).forEach(function (t) { m[t] = (m[t] || 0) + 1; });
+  });
+  return m;
+}
+function escAttr(s) { return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+function renderLbTags(c) {
+  var id = cardId(c);
+  var bar = document.getElementById('lb-tags');
+  var cur = tagsOf(id), all = allTags();
+  var html = '<div class="lt-row"><input id="lt-input" placeholder="add tag, then Enter"></div>';
+  html += '<div class="lt-chips">';
+  cur.forEach(function (t) {
+    html += '<span class="chip cur" data-t="' + escAttr(t) + '">#' + escAttr(t) + ' <b>✕</b></span>';
+  });
+  html += '</div>';
+  var others = Object.keys(all).filter(function (t) { return cur.indexOf(t) === -1; }).sort();
+  if (others.length) {
+    html += '<div class="lt-existing">';
+    others.forEach(function (t) {
+      html += '<span class="chip add" data-t="' + escAttr(t) + '">#' + escAttr(t) + ' (' + all[t] + ')</span>';
+    });
+    html += '</div>';
+  }
+  bar.innerHTML = html;
+  var inp = document.getElementById('lt-input');
+  inp.addEventListener('keydown', function (e) {
+    e.stopPropagation();
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addTag(id, inp.value); inp.value = '';
+      renderLbTags(c); if (typeof renderTags === 'function') renderTags();
+    }
+  });
+  bar.querySelectorAll('.chip.cur b').forEach(function (b) {
+    b.onclick = function () {
+      removeTag(id, b.parentNode.getAttribute('data-t'));
+      renderLbTags(c); if (typeof renderTags === 'function') renderTags();
+    };
+  });
+  bar.querySelectorAll('.chip.add').forEach(function (ch) {
+    ch.onclick = function () {
+      addTag(id, ch.getAttribute('data-t'));
+      renderLbTags(c); if (typeof renderTags === 'function') renderTags();
+    };
+  });
+}
+
+// --- tags sidebar group --------------------------------------------------
+function deleteTagEverywhere(t) {
+  var n = 0;
+  Object.keys(GST.tags).forEach(function (id) {
+    if ((GST.tags[id] || []).indexOf(t) !== -1) n++;
+  });
+  if (!confirm('Delete tag "#' + t + '" from ' + n + ' image(s)? This cannot be undone.')) return;
+  Object.keys(GST.tags).forEach(function (id) {
+    var a = GST.tags[id]; var i = a.indexOf(t);
+    if (i > -1) a.splice(i, 1);
+    if (!a.length) delete GST.tags[id];
+  });
+  if (activeTag === t) activeTag = null;
+  saveState(); renderTags(); applyFilters();
+}
+function renderTags() {
+  var all = allTags();
+  var keys = Object.keys(all).sort();
+  var grp = document.getElementById('grp-tags');
+  var box = document.getElementById('sb-tags');
+  box.innerHTML = '';
+  if (!keys.length) { grp.style.display = 'none'; return; }
+  grp.style.display = '';
+  keys.forEach(function (t) {
+    var row = document.createElement('div');
+    row.className = 'sb-lnk tg-lnk' + (activeTag === t ? ' active' : '');
+    var lbl = document.createElement('span'); lbl.textContent = '#' + t;
+    var right = document.createElement('span'); right.className = 'tg-right';
+    var sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = all[t];
+    var x = document.createElement('span'); x.className = 'tg-x';
+    x.textContent = '✕'; x.title = 'Delete tag everywhere';
+    x.onclick = function (e) { e.stopPropagation(); deleteTagEverywhere(t); };
+    right.appendChild(sc); right.appendChild(x);
+    row.appendChild(lbl); row.appendChild(right);
+    row.onclick = function () {
+      activeTag = (activeTag === t) ? null : t;
+      applyFilters(); renderTags();
+    };
+    box.appendChild(row);
+  });
+}
+
+// --- export / import -----------------------------------------------------
+function exportState() {
+  var blob = new Blob([JSON.stringify(GST, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  var d = new Date().toISOString().slice(0, 10);
+  a.href = url; a.download = 'gallery-marks-' + d + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function importState(file) {
+  var r = new FileReader();
+  r.onload = function () {
+    try {
+      var o = JSON.parse(r.result) || {};
+      GST = { marks: {}, tags: {} };
+      var im = o.marks || {};
+      Object.keys(im).forEach(function (id) { if (im[id]) GST.marks[id] = 1; });
+      var it = o.tags || {};
+      Object.keys(it).forEach(function (id) {
+        if (Object.prototype.toString.call(it[id]) === '[object Array]')
+          it[id].forEach(function (t) { addTag(id, String(t)); });
+      });
+      activeTag = null;
+      saveState(); applyMarkAll(); renderMarked(); renderTags(); applyFilters();
+      alert('Imported.');
+    } catch (e) { alert('Import failed: ' + e); }
+  };
+  r.readAsText(file);
+}
+
+// --- init ----------------------------------------------------------------
+addMarkButtons();
+renderMarked();
+renderTags();
+document.getElementById('btn-export').onclick = exportState;
+document.getElementById('btn-import').onclick = function () { document.getElementById('imp-file').click(); };
+document.getElementById('imp-file').onchange = function (e) {
+  if (e.target.files[0]) importState(e.target.files[0]);
+};
 </script>
 </body></html>
